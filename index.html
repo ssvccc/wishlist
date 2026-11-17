@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wishlist</title>
+<style>
+  :root {
+    --bg: #f6f3ee; --card: #fff; --ink: #1d1b19; --muted: #7a736b;
+    --line: #e6e0d7; --accent: #c2532f; --accent-soft: #f6e4dc; --ok: #3d7a52;
+    --bad: #b3261e;
+    --c-die: #b83a3a; --c-need: #3b6ea5; --c-noturg: #8a5fa8; --c-other: #9a8f80; --c-cart: #1d1b19; --c-left: #d9c49a;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #171614; --card: #211f1c; --ink: #f1ece4; --muted: #a39b90;
+            --line: #36322d; --accent: #e7795a; --accent-soft: #3a2620; --ok: #7cc196; --bad: #ff8a80;
+            --c-die: #f08a8a; --c-need: #7aa7d9; --c-noturg: #b89ad6; --c-other: #a39b90; --c-cart: #f1ece4; --c-left: #8c7a52; }
+  }
+  :root[data-theme="dark"] { --bg: #171614; --card: #211f1c; --ink: #f1ece4; --muted: #a39b90;
+            --line: #36322d; --accent: #e7795a; --accent-soft: #3a2620; --ok: #7cc196; --bad: #ff8a80;
+            --c-die: #f08a8a; --c-need: #7aa7d9; --c-noturg: #b89ad6; --c-other: #a39b90; --c-cart: #f1ece4; --c-left: #8c7a52; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { overflow-x: clip; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+  /* ---- page layout: categories | items | budget */
+  .top { max-width: 1400px; margin: 0 auto; padding: 28px 20px 0; display: flex; align-items: baseline;
+         justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  h1 { font: 600 34px/1.1 Georgia, "Times New Roman", serif; margin: 0; letter-spacing: -.5px; }
+  .summary { color: var(--muted); font-size: 14px; }
+  .summary b { color: var(--ink); }
+  .app { max-width: 1400px; margin: 0 auto; padding: 18px 20px 64px; display: grid;
+         grid-template-columns: 240px minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+  .center { min-width: 0; }
+  .side { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; min-width: 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .panel h3 { margin: 0 0 8px; font: 600 15px ui-sans-serif, -apple-system, sans-serif; color: var(--muted);
+              text-transform: uppercase; letter-spacing: .6px; }
+
+  /* ---- left: categories */
+  #catNav { display: flex; flex-direction: column; gap: 4px; }
+  .navrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 10px;
+            border-radius: 10px; border: 1px solid transparent; background: none; color: var(--ink); cursor: pointer; }
+  .navrow:hover { background: var(--accent-soft); }
+  .navrow.on { background: var(--bg); border-color: var(--cc); box-shadow: inset 4px 0 0 var(--cc); }
+  .navrow.drop { outline: 2px dashed var(--cc); outline-offset: -2px; }
+  .navrow .ne { font-size: 18px; width: 24px; text-align: center; flex: 0 0 auto; }
+  .navrow .nl { display: flex; flex-direction: column; min-width: 0; }
+  .navrow .nl b { font-weight: 600; font-size: 14px; line-height: 1.25; }
+  .navrow .nl small { color: var(--muted); font-size: 12px; }
+
+  /* ---- right: budget panel */
+  .blabel { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+  .blabel input { width: 120px; font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .donut { display: flex; justify-content: center; margin: 14px 0 8px; }
+  .donut-svg { width: 190px; height: 190px; }
+  .donut-svg circle { transition: stroke-width .15s; }
+  .donut-svg circle:hover { stroke-width: 34; }
+  .dc-amt { fill: var(--ink); font: 600 17px Georgia, "Times New Roman", serif; }
+  .dc-sub { fill: var(--muted); font: 12px ui-sans-serif, -apple-system, sans-serif; }
+  .legend { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .legend li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .legend li b { margin-left: auto; }
+  .status { font: 600 22px/1.2 Georgia, "Times New Roman", serif; margin: 14px 0 4px; }
+  .status.ok { color: var(--ok); }
+  .status.bad { color: var(--bad); }
+  .status.muted { color: var(--muted); font-size: 16px; font-family: inherit; font-weight: 500; }
+  .status2 { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+  .cartline { font-size: 14px; margin: 10px 0 10px; }
+  button.wide { width: 100%; padding: 10px 12px; }
+
+  /* ---- center */
+  form.add { display: flex; gap: 8px; margin: 0 0 14px; }
+  form.add textarea { flex: 1 1 0; min-width: 0; width: 100%; resize: vertical; min-height: 46px; max-height: 180px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; }
+  form.add textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+           background: var(--card); color: var(--ink); padding: 8px 12px; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); padding: 0 20px; font-weight: 600; }
+  button.primary:disabled { opacity: .6; cursor: progress; }
+  button:disabled { opacity: .5; cursor: default; }
+  .chip { padding: 5px 12px; border-radius: 999px; font-size: 13px; }
+  .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; }
+  .bar .sp { flex: 1; }
+  .listtools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .bar select, .bar input { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; }
+  .toolbar .muted { color: var(--muted); font-size: 13px; }
+  .gridhead { font-size: 13px; color: var(--muted); margin: -6px 0 12px; }
+  .orig { font-size: 12px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+  .nomatch { text-align: center; color: var(--muted); padding: 48px 20px; border: 1px dashed var(--line); border-radius: var(--radius); }
+  .nomatch b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+          overflow: hidden; display: flex; flex-direction: column; transition: opacity .2s; position: relative; min-width: 0; }
+  .card.bought { opacity: .55; }
+  .card.faded { opacity: .5; }
+  .card.dragging { opacity: .35; }
+  .card[draggable="true"] { cursor: grab; }
+  .thumb { aspect-ratio: 1 / 1; background: #fff; display: grid; place-items: center; position: relative; }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .thumb .ph { font: 600 54px Georgia, serif; color: var(--accent); background: var(--accent-soft);
+               width: 100%; height: 100%; display: grid; place-items: center; }
+  .badge { position: absolute; top: 10px; left: 10px; background: var(--ok); color: #fff;
+           font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; letter-spacing: .3px; }
+  .pill { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; padding: 0; border-radius: 999px;
+          display: grid; place-items: center; font-size: 18px; background: var(--card);
+          border: 2px solid var(--cc, var(--line)); }
+  .pill.add { border-style: dashed; color: var(--muted); font-size: 20px; }
+  .pillwrap { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; }
+  .pillwrap .pill { position: relative; top: auto; right: auto; }
+  .pick-emojis { display: none; flex-direction: column; gap: 2px; margin-top: 6px; background: var(--card); border: 1px solid var(--line);
+                 border-radius: 14px; padding: 4px 4px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .pick-emojis button { border: 0; background: none; padding: 2px 4px; font-size: 18px; line-height: 1; border-radius: 999px; }
+  .pick-emojis button:hover { background: var(--accent-soft); }
+  .pillwrap:hover .pick-emojis, .pillwrap:focus-within .pick-emojis { display: flex; }
+  .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .store { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .title { color: inherit; text-decoration: none; font-weight: 500;
+           display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .title:hover { text-decoration: underline; }
+  .price { font-weight: 700; font-size: 17px; margin-top: 2px; }
+  .price.none { font-weight: 400; color: var(--muted); font-size: 13px; }
+  .notes { font-size: 13px; color: var(--muted); font-style: italic; }
+  .err { font-size: 12px; color: var(--accent); }
+  .ptag { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; align-self: flex-start; margin-top: 2px;
+          border: 1px solid currentColor; }
+  .ptag.ok { color: var(--ok); }
+  .ptag.no { color: var(--accent); }
+  .ptag.cart { color: var(--c-cart); }
+  .ptag.dim { color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 10px; }
+  .actions button { font-size: 12px; padding: 5px 8px; flex: 1 1 auto; }
+  .actions button.mini { flex: 0 0 auto; padding: 5px 7px; }
+  .card.loading .thumb { animation: pulse 1.2s infinite ease-in-out; background: var(--line); }
+  @keyframes pulse { 50% { opacity: .5; } }
+
+  /* plan view */
+  .psec { margin-bottom: 28px; }
+  .phead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-left: 4px solid var(--cc);
+           padding-left: 10px; margin-bottom: 12px; }
+  .phead .pt { font: 600 18px Georgia, serif; }
+  .phead .pm { font-size: 13px; color: var(--muted); }
+  .phead .pm b { color: var(--ink); }
+  .psgrid.over { outline: 2px dashed var(--muted); outline-offset: 4px; border-radius: var(--radius); }
+
+  /* cart view */
+  .storegroup { margin-bottom: 28px; }
+  .shead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .shead h3 { margin: 0; font: 600 18px Georgia, serif; }
+  .shead .sub { color: var(--muted); font-size: 13px; }
+  .shead .sub b { color: var(--ink); }
+  .shead .sp { flex: 1; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; border: 1px dashed var(--line); border-radius: var(--radius); }
+
+  dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
+           width: min(440px, 92vw); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h2 { margin: 0 0 12px; font: 600 20px Georgia, serif; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  dialog input, dialog textarea { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  dialog .row { display: flex; gap: 8px; } dialog .row > div:first-child { flex: 1; } dialog .row > div:last-child { width: 90px; }
+  dialog .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  dialog .hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .pickbtn { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 8px; padding: 10px 12px; }
+  .pickbtn.on { border-color: var(--ink); font-weight: 600; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+           padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* below 1000px: budget panel on top, categories as a scrollable row of chips */
+  @media (max-width: 1000px) {
+    .app { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .side-right { order: 0; position: static; max-height: none; overflow: visible; }
+    .side-left { order: 1; position: static; max-height: none; overflow: visible; }
+    .center { order: 2; }
+    #catNav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+    .navrow { width: auto; flex: 0 0 auto; border-radius: 999px; padding: 7px 12px; }
+    .navrow .nl small { display: none; }
+    .navrow.on { box-shadow: none; border-color: var(--cc); }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .donut-svg { width: 160px; height: 160px; }
+  }
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .top, .app { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Wishlist</h1>
+  <div class="summary" id="summary"></div>
+</header>
+
+<div class="app">
+  <aside class="side side-left">
+    <div class="panel">
+      <h3>Categories</h3>
+      <nav id="catNav"></nav>
+    </div>
+  </aside>
+
+  <main class="center">
+    <form class="add" id="addForm">
+      <textarea id="urls" rows="1" placeholder="Paste a product link (or several, one per line) and press Enter"></textarea>
+      <button class="primary" id="addBtn" type="submit">Add</button>
+    </form>
+
+    <div class="bar">
+      <button class="chip on" data-view="wanted">Wanted</button>
+      <button class="chip" data-view="plan">Plan</button>
+      <button class="chip" data-view="cart">Cart</button>
+      <button class="chip" data-view="bought">Bought</button>
+      <button class="chip" data-view="all">All</button>
+      <span class="sp"></span>
+      <div class="listtools" id="listtools">
+        <input id="search" type="search" placeholder="Search…">
+        <select id="sort" title="Sort">
+          <option value="manual">Manual order</option>
+          <option value="cheap">Price low → high</option>
+          <option value="pricey">Price high → low</option>
+          <option value="new">Newest added</option>
+          <option value="store">Store A–Z</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="gridhead" id="gridhead"><span id="count"></span></div>
+    <div id="main"></div>
+  </main>
+
+  <aside class="side side-right">
+    <div class="panel">
+      <label class="blabel">Budget €<input id="budget" inputmode="decimal" placeholder="e.g. 400"></label>
+      <div class="donut" id="donut"></div>
+      <ul class="legend" id="legend"></ul>
+      <div class="status" id="status"></div>
+      <div class="status2" id="status2" hidden></div>
+      <div class="cartline" id="cartline"></div>
+      <button class="primary wide" data-act="fill" id="fillBtn">Fill cart from plan (0)</button>
+    </div>
+  </aside>
+</div>
+
+<dialog id="edit">
+  <form method="dialog" id="editForm">
+    <h2>Edit item</h2>
+    <label>Title</label><input name="title">
+    <div class="orig" id="origTitle"></div>
+    <div class="row">
+      <div><label>Price</label><input name="price" placeholder="e.g. 49,90"></div>
+      <div><label>Currency</label><input name="currency" maxlength="3" placeholder="EUR"></div>
+    </div>
+    <label>Store</label><input name="store">
+    <label>Group</label><input name="group" placeholder="e.g. same jacket, other colour">
+    <p class="hint">Items in the same group: only one of them is planned.</p>
+    <label>Image link</label><input name="image" placeholder="https://…">
+    <label>Notes (size, colour, why you want it…)</label><textarea name="notes" rows="2"></textarea>
+    <div class="btns">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button class="primary" value="save" style="padding:8px 18px">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="picker">
+  <h2>Category</h2>
+  <div id="pickList"></div>
+  <div class="btns"><button type="button" id="pickCancel">Cancel</button></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+
+// ---- categories: edit this list to change names, emoji or order (priority order)
+const CATEGORIES = [
+  { id: "die",    emoji: "💀",     label: "Extremely cool stuff", color: "var(--c-die)" },
+  { id: "need",   emoji: "🧺",     label: "Necessaries",                 color: "var(--c-need)" },
+  { id: "noturg", emoji: "🙇🏼‍♀️", label: "Not very urgent",                color: "var(--c-noturg)" },
+  { id: "",       emoji: "",       label: "Other cool stuff",           color: "var(--c-other)" },
+];
+const CAT = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+const TIER_IDS = CATEGORIES.map(c => c.id);
+
+let items = [];
+let pending = [];          // urls being fetched right now
+let view = "wanted";       // wanted | plan | cart | bought | all
+let catFilter = null;      // null = all categories, otherwise a category id ("" = Everything else)
+let budget = null;         // number or null
+const DEFAULT_SHARES = { die: 20, need: 60, "": 20, noturg: 0 };   // percent of the budget after the cart (fixed)
+let pickingId = null;
+
+const api = async (path, opts = {}) => {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+};
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+// "1.299,00" / "1,299.00" / "49,9" / "49.90" -> number
+function num(p) {
+  if (!p) return NaN;
+  let s = String(p).replace(/[^\d.,]/g, "");
+  const lc = s.lastIndexOf(","), ld = s.lastIndexOf(".");
+  if (lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if (lc > -1) s = /,\d{1,2}$/.test(s) ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if ((s.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(s)) s = s.replace(/\./g, "");
+  return parseFloat(s);
+}
+
+function money(n, cur) {
+  if (isNaN(n)) return "";
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || "EUR" }).format(n); }
+  catch { return `${n.toFixed(2)} ${cur || ""}`.trim(); }
+}
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Fill in defaults for items saved before categories existed (nothing is written back).
+function norm(i) {
+  return {
+    ...i,
+    tier: TIER_IDS.includes(i.tier) ? i.tier : "",
+    rank: Number(i.rank) || 0,
+    in_cart: !!i.in_cart,
+    group: String(i.group || "").trim(),
+  };
+}
+
+// Price used for all money maths: null when there is no readable price.
+function priceOf(i) {
+  const n = num(i.price);
+  return isNaN(n) || n <= 0 ? null : n;
+}
+
+const groupKey = i => i.group.toLowerCase();
+// items saved without an "added" date count as oldest
+const byOrder = (a, b) => (a.rank - b.rank) || ((b.added || 0) - (a.added || 0));
+
+/* ---------------------------------------------------------------- plan
+   One pure function feeds the budget panel, the category nav and the Plan view,
+   so the numbers always agree.
+   1. cart items come out of the budget first
+   2. the rest is split into shares (percent per category); "Not very urgent" gets none
+   3. inside each share: manual order, add if it fits, else skip and keep checking
+   4. leftover = everything not spent in 3 (unused shares + unassigned money);
+      cheapest unplanned items from the included categories fill it
+   "pick one" groups: never two items from one group; cart items block their group
+*/
+const PLAN_TIERS = ["die", "need", ""];   // categories that can be planned ("noturg" never is)
+
+function planItems(all, budgetValue, shares) {
+  const wanted = all.filter(i => !i.bought);
+  const byId = {};
+  const categoryTotals = {};
+  TIER_IDS.forEach(id => categoryTotals[id] = { count: 0, total: 0, inCart: 0, pct: 0, share: 0, fits: 0, leftover: 0, planned: 0 });
+  const pct = id => (PLAN_TIERS.includes(id) ? Math.max(0, Number(shares && shares[id]) || 0) : 0);
+  TIER_IDS.forEach(id => categoryTotals[id].pct = pct(id));
+  const sumPct = PLAN_TIERS.reduce((s, id) => s + pct(id), 0);
+
+  let cartTotal = 0;
+  const usedGroups = new Set();
+  wanted.filter(i => i.in_cart).forEach(i => {
+    byId[i.id] = { status: "cart" };
+    cartTotal += priceOf(i) ?? 0;
+    if (groupKey(i)) usedGroups.add(groupKey(i));
+  });
+  wanted.forEach(i => {
+    const c = categoryTotals[i.tier];
+    const p = priceOf(i) ?? 0;
+    c.count++; c.total += p;
+    if (i.in_cart) c.inCart += p;
+  });
+  const mustTotal = cartTotal + wanted
+    .filter(i => i.tier === "die" && !i.in_cart)
+    .reduce((s, i) => s + (priceOf(i) ?? 0), 0);
+
+  // no budget: nothing can be planned yet
+  if (budgetValue == null) {
+    wanted.forEach(i => {
+      if (byId[i.id]) return;
+      byId[i.id] = { status: i.tier === "noturg" ? "excluded" : i.plan_skip ? "skipped" : priceOf(i) == null ? "noprice" : "nobudget" };
+    });
+    return { byId, cartTotal, categoryTotals, sumPct, unassigned: 0, plannedTotal: 0, leftoverTotal: 0, left: null, mustTotal, pool: null };
+  }
+
+  // 2. shares of what is left after the cart (never reserve more than the pool in total)
+  const pool = Math.max(0, budgetValue - cartTotal);
+  const reservedBy = {};
+  let reserved = 0;
+  PLAN_TIERS.forEach(id => {
+    reservedBy[id] = Math.max(0, Math.min(pool * pct(id) / 100, pool - reserved));
+    reserved += reservedBy[id];
+    categoryTotals[id].share = reservedBy[id];
+  });
+  const unassigned = pool - reserved;
+
+  // 3. inside each share: manual order, greedy with skip
+  let spent = 0;
+  PLAN_TIERS.forEach(id => {
+    let rem = reservedBy[id];
+    wanted.filter(i => !i.in_cart && !i.plan_skip && i.tier === id).sort(byOrder).forEach(i => {
+      const p = priceOf(i), g = groupKey(i);
+      if (p == null) byId[i.id] = { status: "noprice" };
+      else if (g && usedGroups.has(g)) byId[i.id] = { status: "group" };
+      else if (p <= rem + 0.005) {
+        rem -= p; spent += p;
+        categoryTotals[id].fits += p;
+        if (g) usedGroups.add(g);
+        byId[i.id] = { status: "fits" };
+      } else byId[i.id] = { status: "nofit", short: p - rem };
+    });
+  });
+
+  // 4. leftover: all money not spent in step 3, cheapest first
+  const leftoverStart = pool - spent;
+  let leftoverRem = leftoverStart;
+  wanted
+    .filter(i => !i.in_cart && !i.plan_skip && PLAN_TIERS.includes(i.tier) && byId[i.id] && byId[i.id].status === "nofit")
+    .sort((a, b) => priceOf(a) - priceOf(b))
+    .forEach(i => {
+      const p = priceOf(i), g = groupKey(i);
+      if (g && usedGroups.has(g)) { byId[i.id] = { status: "group" }; return; }
+      if (p <= leftoverRem + 0.005) {
+        leftoverRem -= p;
+        if (g) usedGroups.add(g);
+        categoryTotals[i.tier].leftover += p;
+        byId[i.id] = { status: "leftover" };
+      } else byId[i.id] = { status: "nofit", short: p - leftoverRem };
+    });
+
+  // anything not handled above: excluded category, or no readable price
+  wanted.forEach(i => {
+    if (byId[i.id]) return;
+    byId[i.id] = { status: i.tier === "noturg" ? "excluded" : i.plan_skip ? "skipped" : priceOf(i) == null ? "noprice" : "nobudget" };
+  });
+
+  let plannedTotal = 0;
+  PLAN_TIERS.forEach(id => {
+    const c = categoryTotals[id];
+    c.planned = c.fits + c.leftover;
+    plannedTotal += c.planned;
+  });
+  return {
+    byId, cartTotal, categoryTotals, sumPct, pool, unassigned, mustTotal,
+    plannedTotal,
+    leftoverTotal: leftoverStart - leftoverRem,
+    left: budgetValue - cartTotal - plannedTotal,
+  };
+}
+
+/* ---------------------------------------------------------------- summary, nav, budget panel */
+function summary() {
+  const wanted = items.filter(i => !i.bought);
+  const totals = {};
+  wanted.forEach(i => { const n = num(i.price); if (!isNaN(n)) totals[i.currency || "EUR"] = (totals[i.currency || "EUR"] || 0) + n; });
+  const tot = Object.entries(totals).map(([c, n]) => money(n, c)).join(" + ");
+  $("#summary").innerHTML = `<b>${wanted.length}</b> wanted · <b>${items.length - wanted.length}</b> bought` +
+    (tot ? ` · total <b>${tot}</b>` : "");
+}
+
+function renderNav(P) {
+  const wanted = items.filter(i => !i.bought);
+  const all = `<button class="navrow ${catFilter === null ? "on" : ""}" data-cat="*" style="--cc:var(--ink)">
+      <span class="ne">🗂️</span>
+      <span class="nl"><b>All categories</b><small>${wanted.length} item${wanted.length === 1 ? "" : "s"} · ${money(wanted.reduce((s, i) => s + (priceOf(i) ?? 0), 0))}</small></span>
+    </button>`;
+  const rows = CATEGORIES.map(c => {
+    const t = P.categoryTotals[c.id];
+    return `<button class="navrow ${catFilter === c.id ? "on" : ""}" data-cat="${c.id}" style="--cc:${c.color}">
+      <span class="ne">${c.emoji}</span>
+      <span class="nl"><b>${esc(c.label)}</b><small>${t.count} item${t.count === 1 ? "" : "s"} · ${money(t.total)}</small></span>
+    </button>`;
+  }).join("");
+  $("#catNav").innerHTML = all + rows;
+}
+
+function donutSVG(P) {
+  const R = 70, C = 2 * Math.PI * R, S = 26;
+  const total = P.plannedTotal;
+  const parts = PLAN_TIERS.map(id => ({ c: CAT[id], amt: P.categoryTotals[id].planned })).filter(p => p.amt > 0);
+  let arcs = "", off = 0;
+  if (total > 0) parts.forEach(p => {
+    const len = C * p.amt / total;
+    arcs += `<circle cx="100" cy="100" r="${R}" fill="none" stroke="${p.c.color}" stroke-width="${S}"
+      stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)">
+      <title>${esc(p.c.label)}: ${money(p.amt)}</title></circle>`;
+    off += len;
+  });
+  else arcs = `<circle cx="100" cy="100" r="${R}" fill="none" stroke="var(--line)" stroke-width="${S}"></circle>`;
+  return `<svg class="donut-svg" viewBox="0 0 200 200" role="img" aria-label="Planned amount by category">
+    ${arcs}
+    <text x="100" y="98" text-anchor="middle" class="dc-amt">${money(total)}</text>
+    <text x="100" y="118" text-anchor="middle" class="dc-sub">planned</text>
+  </svg>`;
+}
+
+function renderBudgetPanel(P) {
+  const parts = PLAN_TIERS.map(id => ({ c: CAT[id], amt: P.categoryTotals[id].planned })).filter(p => p.amt > 0);
+  $("#donut").innerHTML = donutSVG(P);
+  $("#legend").innerHTML = parts.length
+    ? parts.map(p => `<li><span class="dot" style="background:${p.c.color}"></span>${p.c.emoji ? p.c.emoji + " " : ""}${esc(p.c.label)} <b>${money(p.amt)}</b></li>`).join("")
+    : `<li class="muted" style="color:var(--muted)">Nothing planned yet</li>`;
+
+  const st = $("#status"), s2 = $("#status2");
+  if (budget == null) {
+    st.className = "status muted"; st.textContent = "Set a budget to see your plan";
+    s2.hidden = true;
+  } else {
+    if (P.left >= -0.005) { st.className = "status ok"; st.textContent = `${money(P.left)} left in plan`; }
+    else { st.className = "status bad"; st.textContent = `${money(-P.left)} over plan`; }
+    if (P.mustTotal > budget) {
+      s2.hidden = false;
+      s2.textContent = `${CAT.die.label} + cart alone: ${money(P.mustTotal)}, ${money(P.mustTotal - budget)} above budget.`;
+    } else s2.hidden = true;
+  }
+
+  const cart = items.filter(i => i.in_cart && !i.bought);
+  $("#cartline").innerHTML = `🛒 <b>${cart.length}</b> item${cart.length === 1 ? "" : "s"} · <b>${money(P.cartTotal)}</b>` +
+    (budget != null ? ` of ${money(budget)}` : "");
+
+  const fits = Object.values(P.byId).filter(s => s.status === "fits" || s.status === "leftover").length;
+  const fill = $("#fillBtn");
+  fill.textContent = `Fill cart from plan (${fits})`;
+  fill.disabled = !fits;
+}
+
+function renderTop(P) {
+  summary();
+  document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+  $("#listtools").hidden = view === "plan" || view === "cart";
+  renderNav(P);
+  renderBudgetPanel(P);
+}
+
+/* ---------------------------------------------------------------- cards */
+function card(i, ctx = {}) {
+  const n = num(i.price);
+  const priceHtml = isNaN(n)
+    ? `<div class="price none">${i.price ? esc(i.price) : "No price found"}</div>`
+    : `<div class="price">${money(n, i.currency)}</div>`;
+  const initial = esc((i.store || i.title || "?").trim()[0]?.toUpperCase() || "?");
+  const img = i.image
+    ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"
+         onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph',textContent:'${initial}'}))">`
+    : `<div class="ph">${initial}</div>`;
+  const cat = CAT[i.tier];
+  const pill = i.tier
+    ? `<button class="pill" data-act="cat" style="--cc:${cat.color}" title="Change category">${cat.emoji}</button>`
+    : `<div class="pillwrap">
+         <button class="pill add" type="button" title="Hover to pick a category">+</button>
+         <div class="pick-emojis">${CATEGORIES.filter(c => c.id).map(c =>
+           `<button type="button" data-pick="${c.id}" title="${esc(c.label)}">${c.emoji}</button>`).join("")}</div>
+       </div>`;
+
+  const s = ctx.plan;
+  const tagMap = {
+    cart:     `<div class="ptag cart">🛒 In cart</div>`,
+    fits:     `<div class="ptag ok">✓ Fits</div>`,
+    nofit:    `<div class="ptag no">Doesn't fit (${money(s && s.short, i.currency)} short)</div>`,
+    noprice:  `<div class="ptag no">No price — not counted</div>`,
+    group:    `<div class="ptag no">Skipped — same group already chosen</div>`,
+    nobudget: `<div class="ptag no">Set a budget to see if it fits</div>`,
+    leftover: `<div class="ptag ok">✓ Fits (leftover)</div>`,
+    excluded: `<div class="ptag dim">Not planned — not very urgent</div>`,
+    skipped:  `<div class="ptag dim">Not wanted — planner looks at others</div>`,
+  };
+  const tag = s ? (tagMap[s.status] || "") : "";
+  const faded = s && (s.status === "nofit" || s.status === "noprice" || s.status === "group" || s.status === "excluded" || s.status === "skipped") ? "faded" : "";
+  const arrows = ctx.arrows
+    ? `<button class="mini" data-act="up" title="Move up">↑</button><button class="mini" data-act="down" title="Move down">↓</button>`
+    : "";
+  const skipBtn = ctx.drag
+    ? `<button data-act="skip">${i.plan_skip ? "↺ Put back" : "✕ Not wanted"}</button>`
+    : "";
+
+  return `<article class="card ${i.bought ? "bought" : ""} ${faded}" data-id="${i.id}" draggable="true">
+    <div class="thumb">${img}${i.bought ? '<span class="badge">BOUGHT</span>' : ""}${pill}</div>
+    <div class="body">
+      <div class="store">${esc(i.store)}${i.brand && i.brand.toLowerCase() !== (i.store || "").toLowerCase() ? " · " + esc(i.brand) : ""}</div>
+      <a class="title" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">${esc(i.title || i.url)}</a>
+      ${priceHtml}
+      ${tag}
+      ${i.notes ? `<div class="notes">${esc(i.notes)}</div>` : ""}
+      ${i.error ? `<div class="err">${esc(i.error)}</div>` : ""}
+      <div class="actions">
+        ${arrows}
+        <button data-act="bought">${i.bought ? "Unmark" : "Got it"}</button>
+        <button data-act="cart">${i.in_cart ? "🛒 Remove" : "🛒 Add"}</button>
+        ${skipBtn}
+        <button data-act="edit">Edit</button>
+        <button data-act="refresh" title="Fetch again">↻</button>
+        <button data-act="delete" title="Remove">✕</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+/* ---------------------------------------------------------------- lists */
+const isManual = () => $("#sort").value === "manual";
+const searchText = i => [i.title, i.store, i.brand, CAT[i.tier] ? CAT[i.tier].label : ""].join(" ").toLowerCase();
+
+function visible() {
+  const q = $("#search").value.trim().toLowerCase();
+  const list = items.filter(i =>
+    (view === "all" || (view === "bought") === !!i.bought) &&
+    (catFilter === null || i.tier === catFilter) &&
+    (!q || searchText(i).includes(q)));
+  const pv = i => { const n = num(i.price); return isNaN(n) ? null : n; };
+  const tierPos = i => TIER_IDS.indexOf(i.tier);
+  const cmp = {
+    manual: (a, b) => (tierPos(a) - tierPos(b)) || byOrder(a, b),
+    new: (a, b) => (b.added || 0) - (a.added || 0),
+    cheap: (a, b) => (pv(a) ?? 1e12) - (pv(b) ?? 1e12),
+    pricey: (a, b) => (pv(b) ?? -1) - (pv(a) ?? -1),
+    store: (a, b) => (a.store || "").localeCompare(b.store || "") || (a.title || "").localeCompare(b.title || ""),
+  }[$("#sort").value] || byOrder;
+  return list.sort(cmp);
+}
+
+/* ---------------------------------------------------------------- remembered sort and category */
+const PREFS_KEY = "wishlist.prefs";
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+    if ([...$("#sort").options].some(o => o.value === p.sort)) $("#sort").value = p.sort;
+    if (p.catFilter === null || TIER_IDS.includes(p.catFilter)) catFilter = p.catFilter;
+  } catch { /* storage blocked or corrupt: use defaults */ }
+}
+function savePrefs() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ sort: $("#sort").value, catFilter })); }
+  catch { /* storage blocked: nothing to do */ }
+}
+
+// Items chosen for the plan: planned (fits or leftover) or already in the cart
+const SELECTED = ["fits", "leftover", "cart"];
+let planShowAll = false;   // false = only selected items; true = every item in the plan
+
+function planView(P) {
+  const hidden = items.filter(i => !i.bought && !SELECTED.includes((P.byId[i.id] || {}).status)).length;
+  let html = `<div class="toolbar">
+    <button class="primary" data-act="fill" ${fitsCount(P) ? "" : "disabled"}>Fill cart from plan (${fitsCount(P)})</button>
+    <span class="muted">Drag cards to reorder or move them to another category, or use ↑ ↓.</span>
+    ${hidden || planShowAll ? `<button data-act="planall">${planShowAll ? "Show selected only" : `Show all (${hidden} more)`}</button>` : ""}
+  </div>`;
+  let shown = 0;
+  CATEGORIES.forEach(c => {
+    if (catFilter !== null && catFilter !== c.id) return;
+    const list = items.filter(i => !i.bought && i.tier === c.id && (planShowAll || SELECTED.includes((P.byId[i.id] || {}).status))).sort(byOrder);
+    if (!list.length) return;
+    shown++;
+    const t = P.categoryTotals[c.id];
+    html += `<section class="psec">
+      <div class="phead" style="--cc:${c.color}">
+        <span class="pt">${c.emoji ? esc(c.emoji) + " " : ""}${esc(c.label)}</span>
+        <span class="pm">${t.count} item${t.count === 1 ? "" : "s"} · <b>${money(t.total)}</b>${budget != null && c.id !== "noturg" ? ` · share <b>${money(t.share)}</b> · <b>${money(t.planned)}</b> planned` : ""}</span>
+      </div>
+      <div class="grid psgrid" data-tier="${c.id}">${list.map(i => card(i, { plan: P.byId[i.id], drag: true, arrows: true })).join("")}</div>
+    </section>`;
+  });
+  if (!shown) html += `<div class="empty">${planShowAll || items.some(i => !i.bought) ? "Nothing selected for the plan yet." : "Nothing to plan yet. Add some items first."}</div>`;
+  return html;
+}
+const fitsCount = P => Object.values(P.byId).filter(s => s.status === "fits" || s.status === "leftover").length;
+
+function cartView(P) {
+  const cart = items.filter(i => i.in_cart && !i.bought);
+  if (!cart.length) return `<div class="empty">Your cart is empty. Use 🛒 Add on a card, or “Fill cart from plan”.</div>`;
+  const cartLine = budget == null
+    ? `Cart total <b>${money(P.cartTotal)}</b>`
+    : P.cartTotal <= budget
+      ? `Cart <b>${money(P.cartTotal)}</b> of ${money(budget)} · <b>${money(budget - P.cartTotal)}</b> left`
+      : `Cart <b>${money(P.cartTotal)}</b> · <span style="color:var(--bad)"><b>${money(P.cartTotal - budget)}</b> over budget</span>`;
+  const perCat = CATEGORIES
+    .filter(c => P.categoryTotals[c.id].inCart > 0)
+    .map(c => `${c.emoji ? c.emoji + " " : ""}${esc(c.label)} <b>${money(P.categoryTotals[c.id].inCart)}</b>`)
+    .join(" · ");
+
+  const stores = {};
+  cart.forEach(i => { const k = (i.store || "").trim() || "Unknown store"; (stores[k] ||= []).push(i); });
+  const storeHtml = Object.keys(stores).sort((a, b) => a.localeCompare(b)).map(name => {
+    const list = stores[name].sort(byOrder);
+    const sub = list.reduce((s, i) => s + (priceOf(i) ?? 0), 0);
+    return `<section class="storegroup">
+      <div class="shead">
+        <h3>${esc(name)}</h3>
+        <span class="sub">${list.length} item${list.length === 1 ? "" : "s"} · <b>${money(sub)}</b></span>
+        <span class="sp"></span>
+        <button data-act="openall">Open all</button>
+      </div>
+      <div class="grid">${list.map(i => card(i)).join("")}</div>
+    </section>`;
+  }).join("");
+
+  return `<div class="toolbar">
+      <span>${cartLine}</span>
+    </div>
+    ${perCat ? `<p class="muted" style="font-size:13px;margin:0 0 10px;color:var(--muted)">${perCat}</p>` : ""}
+    <div class="toolbar">
+      <button data-act="emptycart">Empty cart</button>
+      <button data-act="buycart">Mark cart as bought</button>
+    </div>
+    ${storeHtml}`;
+}
+
+function renderMain(P) {
+  const main = $("#main");
+  const listView = view !== "plan" && view !== "cart";
+  $("#gridhead").hidden = !listView;
+  if (view === "plan") { main.innerHTML = planView(P); return; }
+  if (view === "cart") { main.innerHTML = cartView(P); return; }
+  const list = visible();
+  $("#count").textContent = `${list.length} item${list.length === 1 ? "" : "s"}`;
+  const loaders = (view === "wanted" || view === "all") ? pending.map(u => `<article class="card loading"><div class="thumb"></div>
+    <div class="body"><div class="store">Fetching…</div><div class="title">${esc(u)}</div></div></article>`).join("") : "";
+  if (!list.length && !loaders) {
+    const filtering = $("#search").value.trim() || catFilter !== null;
+    main.innerHTML = items.length && filtering
+      ? `<div class="nomatch"><b>No matches</b>Try another word, category or sort.</div>`
+      : `<div class="empty">${items.length ? "Nothing here yet." : "Your wishlist is empty. Paste a product link above to start."}</div>`;
+    return;
+  }
+  main.innerHTML = `<div class="grid">${loaders}${list.map(i => card(i, { arrows: isManual() })).join("")}</div>`;
+}
+
+function render() {
+  const P = planItems(items, budget, DEFAULT_SHARES);
+  renderTop(P);
+  renderMain(P);
+}
+
+async function reload() {
+  items = (await api("/api/items")).map(norm);
+  render();
+}
+
+async function patch(id, changes) {
+  const updated = await api(`/api/items/${id}`, { method: "PATCH", body: JSON.stringify(changes) });
+  const item = items.find(i => i.id === id);
+  if (item) Object.assign(item, norm(updated));
+  return item;
+}
+
+/* ---------------------------------------------------------------- adding links */
+async function addUrls(text) {
+  const urls = [...new Set(text.split(/[\s,]+/).map(s => s.trim()).filter(s => /^https?:\/\//i.test(s)))];
+  if (!urls.length) { toast("That doesn't look like a link."); return; }
+  const dupes = urls.filter(u => items.some(i => i.url === u));
+  const fresh = urls.filter(u => !dupes.includes(u));
+  if (dupes.length) toast(`${dupes.length} already on your list`);
+  pending.push(...fresh); if (view === "bought") setView("wanted"); render();
+  await Promise.all(fresh.map(async u => {
+    try { const it = await api("/api/items", { method: "POST", body: JSON.stringify({ url: u }) }); items.unshift(norm(it)); }
+    catch (e) { toast(e.message); }
+    finally { pending = pending.filter(p => p !== u); render(); }
+  }));
+}
+
+$("#addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = $("#urls").value; $("#urls").value = "";
+  addUrls(v);
+});
+$("#urls").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#addForm").requestSubmit(); }
+});
+
+/* ---------------------------------------------------------------- views, filters, budget */
+function setView(v) { view = v; render(); }
+document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+$("#search").addEventListener("input", render);
+$("#sort").addEventListener("change", () => { savePrefs(); render(); });
+
+$("#catNav").addEventListener("click", e => {
+  const row = e.target.closest(".navrow"); if (!row) return;
+  const id = row.dataset.cat;
+  catFilter = id === "*" || catFilter === id ? null : id;
+  savePrefs();
+  render();
+});
+
+// "/" focuses the search box, Esc clears it
+document.addEventListener("keydown", e => {
+  const search = $("#search");
+  const typing = e.target.matches && e.target.matches("input, textarea, select");
+  if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); search.focus(); search.select(); return;
+  }
+  if (e.key === "Escape" && (document.activeElement === search || search.value) && !document.querySelector("dialog[open]")) {
+    search.value = ""; search.blur(); render();
+  }
+});
+
+function parseBudget(s) {
+  if (!String(s).trim()) return { value: null, valid: true };
+  const n = num(s);
+  return isNaN(n) || n < 0 ? { value: null, valid: false } : { value: n, valid: true };
+}
+let budgetTimer = null;
+$("#budget").addEventListener("input", () => {
+  const { value, valid } = parseBudget($("#budget").value);
+  budget = value;
+  render();
+  if (!valid) return;
+  clearTimeout(budgetTimer);
+  budgetTimer = setTimeout(async () => {
+    try { await api("/api/settings", { method: "PUT", body: JSON.stringify({ budget }) }); }
+    catch (err) { toast(err.message); }
+  }, 500);
+});
+
+/* ---------------------------------------------------------------- fill from plan (budget panel and Plan view) */
+document.addEventListener("click", async e => {
+  const b = e.target.closest('[data-act="fill"]'); if (!b || b.disabled) return;
+  try {
+    const P = planItems(items, budget, DEFAULT_SHARES);
+    const ids = Object.keys(P.byId).filter(k => P.byId[k].status === "fits" || P.byId[k].status === "leftover");
+    if (!ids.length) return;
+    await api("/api/items/bulk", { method: "POST", body: JSON.stringify({ ids, changes: { in_cart: true } }) });
+    await reload();
+    toast(`${ids.length} item${ids.length === 1 ? "" : "s"} added to cart`);
+  } catch (err) { toast(err.message); render(); }
+});
+
+/* ---------------------------------------------------------------- card actions */
+$("#main").addEventListener("click", async e => {
+  const pick = e.target.closest("[data-pick]");
+  if (pick) {
+    try { await patch(pick.closest(".card").dataset.id, { tier: pick.dataset.pick }); render(); }
+    catch (err) { toast(err.message); }
+    return;
+  }
+  const btn = e.target.closest("button[data-act]"); if (!btn || btn.disabled) return;
+  const act = btn.dataset.act;
+  const cardEl = btn.closest(".card");
+  const id = cardEl ? cardEl.dataset.id : null;
+  const item = id ? items.find(i => i.id === id) : null;
+  try {
+    if (act === "bought") {
+      await patch(id, { bought: !item.bought }); render();
+    } else if (act === "cart") {
+      await patch(id, { in_cart: !item.in_cart }); render();
+    } else if (act === "skip") {
+      await patch(id, { plan_skip: !item.plan_skip }); render();
+    } else if (act === "cat") {
+      pickingId = id;
+      $("#pickList").innerHTML = CATEGORIES.map(c =>
+        `<button class="pickbtn ${item.tier === c.id ? "on" : ""}" data-tier="${c.id}">
+           <span>${c.emoji || "＋"}</span><span>${esc(c.label)}</span></button>`).join("");
+      $("#picker").showModal();
+    } else if (act === "up" || act === "down") {
+      const ids = items.filter(i => !i.bought && i.tier === item.tier).sort(byOrder).map(i => i.id);
+      const k = ids.indexOf(id), j = act === "up" ? k - 1 : k + 1;
+      if (j < 0 || j >= ids.length) return;
+      [ids[k], ids[j]] = [ids[j], ids[k]];
+      await api("/api/items/order", { method: "POST", body: JSON.stringify({ ids }) });
+      await reload();
+    } else if (act === "planall") {
+      planShowAll = !planShowAll; render();
+    } else if (act === "emptycart") {
+      const ids = items.filter(i => i.in_cart && !i.bought).map(i => i.id);
+      await api("/api/items/bulk", { method: "POST", body: JSON.stringify({ ids, changes: { in_cart: false } }) });
+      await reload();
+    } else if (act === "buycart") {
+      if (btn.dataset.sure !== "1") {
+        btn.dataset.sure = "1"; btn.textContent = "Sure?";
+        setTimeout(() => { btn.dataset.sure = ""; btn.textContent = "Mark cart as bought"; }, 2500);
+        return;
+      }
+      const ids = items.filter(i => i.in_cart && !i.bought).map(i => i.id);
+      await api("/api/items/bulk", { method: "POST", body: JSON.stringify({ ids, changes: { bought: true, in_cart: false } }) });
+      await reload();
+      toast(`${ids.length} item${ids.length === 1 ? "" : "s"} marked as bought`);
+    } else if (act === "openall") {
+      const links = btn.closest(".storegroup").querySelectorAll("a.title");
+      links.forEach(a => window.open(a.href, "_blank", "noopener,noreferrer"));
+    } else if (act === "delete") {
+      if (btn.dataset.sure !== "1") { btn.dataset.sure = "1"; btn.textContent = "Sure?"; setTimeout(() => { btn.dataset.sure = ""; btn.textContent = "✕"; }, 2500); return; }
+      await api(`/api/items/${id}`, { method: "DELETE" });
+      items = items.filter(i => i.id !== id); render();
+    } else if (act === "refresh") {
+      btn.textContent = "…"; btn.disabled = true;
+      const updated = await api(`/api/items/${id}/refresh`, { method: "POST" });
+      Object.assign(item, norm(updated));
+      render(); toast(item.error ? "Still couldn't read that page" : "Updated");
+    } else if (act === "edit") {
+      editing = item;
+      const f = $("#editForm");
+      ["title", "price", "currency", "store", "group", "image", "notes"].forEach(k => f.elements[k].value = item[k] || "");
+      $("#origTitle").textContent = item.raw_title && item.raw_title !== item.title ? `Original title: ${item.raw_title}` : "";
+      $("#edit").showModal();
+    }
+  } catch (err) { toast(err.message); render(); }
+});
+
+$("#picker").addEventListener("click", async e => {
+  if (e.target.id === "pickCancel") { $("#picker").close(); return; }
+  const b = e.target.closest("[data-tier]"); if (!b) return;
+  $("#picker").close();
+  try { await patch(pickingId, { tier: b.dataset.tier }); render(); }
+  catch (err) { toast(err.message); }
+});
+
+/* ---------------------------------------------------------------- drag and drop */
+// Moves an item to a category at a position (null = end). Same logic for the
+// Plan sections and for dropping on a category in the left nav.
+async function moveItem(id, tier, idx) {
+  const item = items.find(i => i.id === id); if (!item) return;
+  const ids = items.filter(i => !i.bought && i.tier === tier && i.id !== id).sort(byOrder).map(i => i.id);
+  ids.splice(idx == null ? ids.length : idx, 0, id);
+  try {
+    if (item.tier !== tier) await patch(id, { tier });
+    await api("/api/items/order", { method: "POST", body: JSON.stringify({ ids }) });
+    await reload();
+  } catch (err) { toast(err.message); render(); }
+}
+
+let dragId = null;
+const main = $("#main");
+main.addEventListener("dragstart", e => {
+  const c = e.target.closest(".card[draggable='true']"); if (!c) return;
+  dragId = c.dataset.id;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", dragId);
+  c.classList.add("dragging");
+});
+main.addEventListener("dragend", () => {
+  dragId = null;
+  document.querySelectorAll(".dragging").forEach(el => el.classList.remove("dragging"));
+  document.querySelectorAll(".psgrid.over").forEach(el => el.classList.remove("over"));
+});
+// Where a dragged card would land: {tier, idx}, or null when reordering is not allowed here.
+// Plan sections always allow it; list grids only in Manual sort.
+function dropSpot(e) {
+  if (!dragId) return null;
+  const sec = e.target.closest(".psgrid");
+  if (sec) {
+    const cards = [...sec.querySelectorAll(".card:not(.dragging)")];
+    let idx = cards.length;
+    for (let k = 0; k < cards.length; k++) {
+      const r = cards[k].getBoundingClientRect();
+      if (e.clientY < r.bottom && (e.clientY < r.top + r.height / 2 || e.clientX < r.left + r.width / 2)) { idx = k; break; }
+    }
+    return { tier: sec.dataset.tier, idx };
+  }
+  const cardEl = e.target.closest(".card[data-id]");
+  if (!cardEl || cardEl.dataset.id === dragId || view === "cart" || !isManual()) return null;
+  const target = items.find(i => i.id === cardEl.dataset.id);
+  if (!target || target.bought) return null;
+  const tierIds = items.filter(i => !i.bought && i.tier === target.tier && i.id !== dragId).sort(byOrder).map(i => i.id);
+  let idx = tierIds.indexOf(target.id);
+  const r = cardEl.getBoundingClientRect();
+  if (e.clientX > r.left + r.width / 2) idx += 1;   // right half: land after the card
+  return { tier: target.tier, idx };
+}
+
+main.addEventListener("dragover", e => {
+  const spot = dropSpot(e);
+  if (!spot) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  const sec = e.target.closest(".psgrid");
+  document.querySelectorAll(".psgrid.over").forEach(el => el !== sec && el.classList.remove("over"));
+  if (sec) sec.classList.add("over");
+});
+main.addEventListener("drop", async e => {
+  const spot = dropSpot(e);
+  if (!spot) return;
+  e.preventDefault();
+  const id = dragId; dragId = null;
+  await moveItem(id, spot.tier, spot.idx);
+});
+
+const nav = $("#catNav");
+nav.addEventListener("dragover", e => {
+  const row = e.target.closest(".navrow");
+  if (!row || !dragId || row.dataset.cat === "*") return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  nav.querySelectorAll(".navrow").forEach(r => r.classList.toggle("drop", r === row));
+});
+nav.addEventListener("dragleave", e => {
+  if (!nav.contains(e.relatedTarget)) nav.querySelectorAll(".drop").forEach(r => r.classList.remove("drop"));
+});
+nav.addEventListener("drop", async e => {
+  const row = e.target.closest(".navrow");
+  if (!row || !dragId || row.dataset.cat === "*") return;
+  e.preventDefault();
+  const id = dragId; dragId = null;
+  nav.querySelectorAll(".drop").forEach(r => r.classList.remove("drop"));
+  await moveItem(id, row.dataset.cat, null);
+});
+
+/* ---------------------------------------------------------------- edit dialog */
+let editing = null;
+$("#edit").addEventListener("close", async () => {
+  if ($("#edit").returnValue !== "save" || !editing) return;
+  const f = $("#editForm"), body = {};
+  ["title", "price", "currency", "store", "group", "image", "notes"].forEach(k => body[k] = f.elements[k].value.trim());
+  body.currency = body.currency.toUpperCase();
+  try {
+    await patch(editing.id, body);
+    render();
+  } catch (err) { toast(err.message); }
+});
+
+/* ---------------------------------------------------------------- start */
+loadPrefs();
+Promise.all([api("/api/items"), api("/api/settings")]).then(([list, settings]) => {
+  items = list.map(norm);
+  budget = typeof settings.budget === "number" ? settings.budget : null;
+  $("#budget").value = budget == null ? "" : String(budget);
+  render();
+}).catch(() => {
+  $("#main").innerHTML = `<div class="empty">Can't reach the app. Is <code>python3 app.py</code> still running?</div>`;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wishlist · Wishlist mock-up</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .readonly .app { grid-template-columns: 240px minmax(0, 1fr); }
+  .readonly #budgetPanel, .readonly form.add, .readonly #catEdit { display: none; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <div class="titlerow">
+      <h1 id="title"></h1>
+      <span id="vis"></span>
+      <button class="kebab" id="kebab" aria-label="More options" title="More options">⋯</button>
+    </div>
+    <div class="summary" id="summary"></div>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="side side-left">
+    <div class="panel">
+      <h3>Categories</h3>
+      <nav id="catNav"></nav>
+      <button class="wide catedit" id="catEdit" style="margin-top:10px">Edit categories</button>
+    </div>
+  </aside>
+
+  <main class="center">
+    <form class="add" id="addForm">
+      <textarea id="urls" rows="1" placeholder="Paste a product link (or several, one per line) and press Enter"></textarea>
+      <button class="primary" type="submit">Add</button>
+    </form>
+
+    <div class="bar">
+      <button class="chip on" data-view="wanted">Wanted</button>
+      <button class="chip" data-view="plan" id="chipPlan">Plan</button>
+      <button class="chip" data-view="cart" id="chipCart">Cart</button>
+      <button class="chip" data-view="bought">Bought</button>
+      <button class="chip" data-view="all">All</button>
+      <span class="sp"></span>
+      <div class="listtools" id="listtools">
+        <input id="search" type="search" placeholder="Search…">
+        <select id="sort" title="Sort">
+          <option value="manual">Manual order</option>
+          <option value="cheap">Price low → high</option>
+          <option value="pricey">Price high → low</option>
+          <option value="new">Newest added</option>
+          <option value="store">Store A–Z</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="gridhead" id="gridhead"><span id="count"></span></div>
+    <div id="main"></div>
+  </main>
+
+  <aside class="side side-right" id="budgetPanel">
+    <div class="panel">
+      <label class="blabel">Budget €<input id="budget" inputmode="decimal" placeholder="e.g. 400"></label>
+      <div class="donut" id="donut"></div>
+      <ul class="legend" id="legend"></ul>
+      <div class="status" id="status"></div>
+      <div class="status2" id="status2" hidden></div>
+      <div class="cartline" id="cartline"></div>
+      <button class="primary wide" data-act="fill" id="fillBtn">Fill cart from plan (0)</button>
+    </div>
+  </aside>
+</div>
+
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+<script>
+Mock.rail("lists");
+
+/* ---------------------------------------------------------------- setup */
+const params = new URLSearchParams(location.search);
+const LIST = Mock.list(params.get("id")) || Mock.list("winter-layers");
+const RO = !Mock.canEdit(LIST);                  // someone else's list: read-only
+if (RO) document.body.classList.add("readonly");
+const $ = s => document.querySelector(s);
+const esc = Mock.esc, money = Mock.money;
+const cats = () => LIST.categories;
+const catIndex = id => Math.max(0, cats().findIndex(c => c.id === id));
+const byOrder = (a, b) => (a.rank - b.rank) || ((b.added || 0) - (a.added || 0));
+const SELECTED = ["fits", "leftover", "cart"];
+let view = "wanted", catFilter = null, planShowAll = false, dragId = null;
+Mock.onChange = () => render();
+
+if (RO) {
+  $("#chipPlan").hidden = true; $("#chipCart").hidden = true;
+  $("#title").textContent = LIST.title;
+} else {
+  $("#title").textContent = LIST.title;
+}
+$("#vis").innerHTML = `<span class="vis ${LIST.visibility}">${LIST.visibility === "private" ? Mock.icon("lock", 12) : ""}${Mock.visLabel(LIST.visibility)}</span>`;
+$("#kebab").dataset.kebab = LIST.id;
+$("#budget").value = LIST.budget == null ? "" : String(LIST.budget);
+
+function persist() { Mock.save(); }
+function plan() { return Mock.plan(LIST.entries, LIST.budget, cats()); }
+function entry(id) { return LIST.entries.find(e => e.id === id); }
+
+/* ---------------------------------------------------------------- summary, categories panel, budget panel */
+function renderTop(P) {
+  const wanted = LIST.entries.filter(i => !i.bought);
+  const bought = LIST.entries.length - wanted.length;
+  $("#summary").innerHTML = `<b>${wanted.length}</b> wanted · <b>${bought}</b> bought · total <b>${money(Mock.total(wanted))}</b>`;
+  document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+  $("#listtools").hidden = view === "plan" || view === "cart";
+  renderNav(P);
+  if (!RO) renderBudgetPanel(P);
+}
+
+function renderNav(P) {
+  const wanted = LIST.entries.filter(i => !i.bought);
+  const all = `<button class="navrow ${catFilter === null ? "on" : ""}" data-cat="*" style="--cc:var(--ink)">
+      <span class="ne">🗂️</span>
+      <span class="nl"><b>All categories</b><small>${wanted.length} item${wanted.length === 1 ? "" : "s"} · ${money(Mock.total(wanted))}</small></span>
+    </button>`;
+  const rows = cats().map(c => {
+    const t = P.categoryTotals[c.id];
+    return `<button class="navrow ${catFilter === c.id ? "on" : ""}" data-cat="${c.id}" style="--cc:${c.color}">
+      <span class="ne">${c.emoji}</span>
+      <span class="nl"><b>${esc(c.label)}</b><small>${t.count} item${t.count === 1 ? "" : "s"} · ${money(t.total)}</small></span>
+    </button>`;
+  }).join("");
+  $("#catNav").innerHTML = all + rows;
+}
+
+function donutSVG(P) {
+  const parts = cats().filter(c => c.inPlan).map(c => ({ label: c.label, color: c.color, amount: P.categoryTotals[c.id].planned })).filter(p => p.amount > 0);
+  const total = P.plannedTotal;
+  const R = 70, C = 2 * Math.PI * R, S = 26;
+  let arcs = "", off = 0;
+  if (total > 0) parts.forEach(p => {
+    const len = C * p.amount / total;
+    arcs += `<circle cx="100" cy="100" r="${R}" fill="none" style="stroke:${p.color}" stroke-width="${S}"
+      stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)">
+      <title>${esc(p.label)}: ${money(p.amount)}</title></circle>`;
+    off += len;
+  });
+  else arcs = `<circle cx="100" cy="100" r="${R}" fill="none" style="stroke:var(--line)" stroke-width="${S}"></circle>`;
+  return `<svg class="donut-svg" viewBox="0 0 200 200" role="img" aria-label="Planned amount by category">${arcs}
+    <text x="100" y="98" text-anchor="middle" class="dc-amt">${money(total)}</text>
+    <text x="100" y="118" text-anchor="middle" class="dc-sub">planned</text></svg>`;
+}
+
+function renderBudgetPanel(P) {
+  const b = LIST.budget;
+  const parts = cats().filter(c => c.inPlan).map(c => ({ c, amt: P.categoryTotals[c.id].planned })).filter(p => p.amt > 0);
+  $("#donut").innerHTML = donutSVG(P);
+  $("#legend").innerHTML = parts.length
+    ? parts.map(p => `<li><span class="dot" style="background:${p.c.color}"></span>${p.c.emoji ? p.c.emoji + " " : ""}${esc(p.c.label)} <b>${money(p.amt)}</b></li>`).join("")
+    : `<li style="color:var(--muted)">Nothing planned yet</li>`;
+  const st = $("#status"), s2 = $("#status2");
+  if (b == null) { st.className = "status muted"; st.textContent = "Set a budget to see your plan"; s2.hidden = true; }
+  else {
+    if (P.left >= -0.005) { st.className = "status ok"; st.textContent = `${money(P.left)} left in plan`; }
+    else { st.className = "status bad"; st.textContent = `${money(-P.left)} over plan`; }
+    const first = cats()[0];
+    if (P.mustTotal > b && first) {
+      s2.hidden = false;
+      s2.textContent = `${first.label} + cart alone: ${money(P.mustTotal)}, ${money(P.mustTotal - b)} above budget.`;
+    } else s2.hidden = true;
+  }
+  const cart = LIST.entries.filter(i => i.in_cart && !i.bought);
+  $("#cartline").innerHTML = `🛒 <b>${cart.length}</b> item${cart.length === 1 ? "" : "s"} · <b>${money(P.cartTotal)}</b>` +
+    (b != null ? ` of ${money(b)}` : "");
+  const fits = Object.values(P.byId).filter(s => s.status === "fits" || s.status === "leftover").length;
+  const fill = $("#fillBtn");
+  fill.textContent = `Fill cart from plan (${fits})`;
+  fill.disabled = !fits;
+}
+
+/* ---------------------------------------------------------------- views */
+function searchText(i) { return [i.title, i.store, i.brand, Mock.catOf(LIST, i.cat).label].join(" ").toLowerCase(); }
+function isManual() { return $("#sort").value === "manual"; }
+
+function visible() {
+  const q = $("#search").value.trim().toLowerCase();
+  const list = LIST.entries.filter(i =>
+    (view === "all" || (view === "bought") === !!i.bought) &&
+    (catFilter === null || i.cat === catFilter) &&
+    (!q || searchText(i).includes(q)));
+  const pv = i => (i.price > 0 ? i.price : null);
+  const cmp = {
+    manual: (a, b) => (catIndex(a.cat) - catIndex(b.cat)) || byOrder(a, b),
+    new: (a, b) => (b.added || 0) - (a.added || 0),
+    cheap: (a, b) => (pv(a) ?? 1e12) - (pv(b) ?? 1e12),
+    pricey: (a, b) => (pv(b) ?? -1) - (pv(a) ?? -1),
+    store: (a, b) => (a.store || "").localeCompare(b.store || "") || (a.title || "").localeCompare(b.title || ""),
+  }[$("#sort").value] || byOrder;
+  return list.sort(cmp);
+}
+
+function planView(P) {
+  const hidden = LIST.entries.filter(i => !i.bought && !SELECTED.includes((P.byId[i.id] || {}).status)).length;
+  const fits = Object.values(P.byId).filter(s => s.status === "fits" || s.status === "leftover").length;
+  let html = `<div class="toolbar">
+    <button class="primary" data-act="fill" ${fits ? "" : "disabled"}>Fill cart from plan (${fits})</button>
+    <span class="muted">Drag cards to reorder or move them to another category, or use ↑ ↓.</span>
+    ${hidden || planShowAll ? `<button data-act="planall">${planShowAll ? "Show selected only" : `Show all (${hidden} more)`}</button>` : ""}
+  </div>`;
+  let shown = 0;
+  cats().forEach(c => {
+    if (catFilter !== null && catFilter !== c.id) return;
+    const list = LIST.entries.filter(i => !i.bought && i.cat === c.id && (planShowAll || SELECTED.includes((P.byId[i.id] || {}).status))).sort(byOrder);
+    if (!list.length) return;
+    shown++;
+    const t = P.categoryTotals[c.id];
+    html += `<section class="psec">
+      <div class="phead" style="--cc:${c.color}">
+        <span class="pt">${c.emoji ? esc(c.emoji) + " " : ""}${esc(c.label)}</span>
+        <span class="pm">${t.count} item${t.count === 1 ? "" : "s"} · <b>${money(t.total)}</b>${LIST.budget != null && c.inPlan ? ` · share <b>${money(t.share)}</b> · <b>${money(t.planned)}</b> planned` : ""}</span>
+      </div>
+      <div class="grid psgrid" data-tier="${c.id}">${list.map(i => Mock.card(i, LIST, { plan: P.byId[i.id], drag: true, arrows: true })).join("")}</div>
+    </section>`;
+  });
+  if (!shown) html += `<div class="empty">${planShowAll || LIST.entries.some(i => !i.bought) ? "Nothing selected for the plan yet." : "Nothing to plan yet. Add some items first."}</div>`;
+  return html;
+}
+
+function cartView(P) {
+  const cart = LIST.entries.filter(i => i.in_cart && !i.bought);
+  if (!cart.length) return `<div class="empty">Your cart is empty. Use 🛒 Add on a card, or “Fill cart from plan”.</div>`;
+  const cartLine = LIST.budget == null
+    ? `Cart total <b>${money(P.cartTotal)}</b>`
+    : P.cartTotal <= LIST.budget
+      ? `Cart <b>${money(P.cartTotal)}</b> of ${money(LIST.budget)} · <b>${money(LIST.budget - P.cartTotal)}</b> left`
+      : `Cart <b>${money(P.cartTotal)}</b> · <span style="color:var(--bad)"><b>${money(P.cartTotal - LIST.budget)}</b> over budget</span>`;
+  const perCat = cats().filter(c => P.categoryTotals[c.id].inCart > 0)
+    .map(c => `${c.emoji ? c.emoji + " " : ""}${esc(c.label)} <b>${money(P.categoryTotals[c.id].inCart)}</b>`).join(" · ");
+  const stores = {};
+  cart.forEach(i => { const k = (i.store || "").trim() || "Unknown store"; (stores[k] ||= []).push(i); });
+  const storeHtml = Object.keys(stores).sort((a, b) => a.localeCompare(b)).map(name => {
+    const list = stores[name].sort(byOrder);
+    const sub = Mock.total(list);
+    return `<section class="storegroup">
+      <div class="shead">
+        <h3>${esc(name)}</h3>
+        <span class="sub">${list.length} item${list.length === 1 ? "" : "s"} · <b>${money(sub)}</b></span>
+        <span class="sp"></span>
+        <button data-act="openall">Open all</button>
+      </div>
+      <div class="grid">${list.map(i => Mock.card(i, LIST)).join("")}</div>
+    </section>`;
+  }).join("");
+  return `<div class="toolbar"><span>${cartLine}</span></div>
+    ${perCat ? `<p class="muted" style="font-size:13px;margin:0 0 10px">${perCat}</p>` : ""}
+    <div class="toolbar">
+      <button data-act="emptycart">Empty cart</button>
+      <button data-act="buycart">Mark cart as bought</button>
+    </div>${storeHtml}`;
+}
+
+function renderMain(P) {
+  const main = $("#main");
+  const listView = view !== "plan" && view !== "cart";
+  $("#gridhead").hidden = !listView;
+  if (view === "plan") { main.innerHTML = planView(P); return; }
+  if (view === "cart") { main.innerHTML = cartView(P); return; }
+  const list = visible();
+  $("#count").textContent = `${list.length} item${list.length === 1 ? "" : "s"}`;
+  if (!list.length) {
+    const filtering = $("#search").value.trim() || catFilter !== null;
+    main.innerHTML = LIST.entries.length && filtering
+      ? `<div class="nomatch"><b>No matches</b>Try another word, category or sort.</div>`
+      : `<div class="empty">${LIST.entries.length ? "Nothing here yet." : RO ? "This list is empty." : "Your wishlist is empty. Paste a product link above to start."}</div>`;
+    return;
+  }
+  main.innerHTML = `<div class="grid">${list.map(i => Mock.card(i, LIST, { readonly: RO, arrows: isManual() })).join("")}</div>`;
+}
+
+function render() {
+  const P = plan();
+  renderTop(P);
+  renderMain(P);
+}
+
+/* ---------------------------------------------------------------- adding links (paste box) */
+$("#addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = $("#urls").value;
+  $("#urls").value = "";
+  const urls = [...new Set(v.split(/[\s,]+/).map(s => s.trim()).filter(s => /^https?:\/\//i.test(s)))];
+  if (!urls.length) { Mock.toast("That doesn't look like a link."); return; }
+  const dupes = urls.filter(u => LIST.entries.some(i => i.item === u));
+  const fresh = urls.filter(u => !dupes.includes(u));
+  if (dupes.length) Mock.toast(`${dupes.length} already on your list`);
+  if (view === "bought") view = "wanted";
+  fresh.forEach(u => LIST.entries.push(Mock.entryFromUrl(u, LIST)));
+  if (fresh.length) persist();
+  render();
+});
+$("#urls").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#addForm").requestSubmit(); }
+});
+
+/* ---------------------------------------------------------------- chips, filters, budget */
+document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => { view = b.dataset.view; render(); }));
+$("#search").addEventListener("input", render);
+$("#sort").addEventListener("change", render);
+$("#catNav").addEventListener("click", e => {
+  const row = e.target.closest(".navrow"); if (!row) return;
+  const id = row.dataset.cat;
+  catFilter = id === "*" || catFilter === id ? null : id;
+  render();
+});
+document.addEventListener("keydown", e => {
+  const typing = e.target.matches && e.target.matches("input, textarea, select");
+  if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); $("#search").focus(); }
+});
+$("#budget").addEventListener("input", e => {
+  const n = parseFloat(String(e.target.value).replace(",", "."));
+  LIST.budget = isNaN(n) || n < 0 ? null : n;
+  persist();
+  render();
+});
+$("#catEdit").addEventListener("click", () => Mock.categoryDialog(LIST));
+
+/* ---------------------------------------------------------------- category changes, ordering, fill cart */
+function setCat(id, cat) {
+  const en = entry(id); if (!en) return;
+  en.cat = cat;
+  persist(); render();
+}
+function fillFromPlan() {
+  const P = plan();
+  Object.keys(P.byId).forEach(k => {
+    if (P.byId[k].status === "fits" || P.byId[k].status === "leftover") { const en = entry(k); if (en) en.in_cart = true; }
+  });
+  persist(); render();
+}
+// Puts a category's entries into a new order (ids in order, rank 0..n)
+function reorder(catId, ids) {
+  ids.forEach((id, k) => { const en = entry(id); if (en) { en.rank = k; if (catId) en.cat = catId; } });
+}
+function moveItem(id, catId, idx) {
+  const en = entry(id); if (!en) return;
+  const ids = LIST.entries.filter(i => !i.bought && i.cat === catId && i.id !== id).sort(byOrder).map(i => i.id);
+  ids.splice(idx == null ? ids.length : idx, 0, id);
+  reorder(catId, ids);
+  persist(); render();
+}
+
+/* ---------------------------------------------------------------- card actions */
+$("#main").addEventListener("click", e => {
+  const addto = e.target.closest("[data-addto]");
+  if (addto) { Mock.addPopover(addto, entry(addto.dataset.addto)); return; }
+  const pick = e.target.closest("[data-pick]");
+  if (pick) { setCat(pick.closest(".card").dataset.id, pick.dataset.pick); return; }
+
+  const btn = e.target.closest("button[data-act]"); if (!btn || btn.disabled) return;
+  const act = btn.dataset.act;
+  const id = btn.closest(".card") ? btn.closest(".card").dataset.id : null;
+  const en = id ? entry(id) : null;
+  if (act === "bought") { en.bought = !en.bought; persist(); render(); }
+  else if (act === "cart") { en.in_cart = !en.in_cart; persist(); render(); }
+  else if (act === "skip") { en.plan_skip = !en.plan_skip; persist(); render(); }
+  else if (act === "cat") {
+    Mock.dialog("Category", `<label>Category<select name="cat">${cats().map(c =>
+      `<option value="${c.id}" ${c.id === en.cat ? "selected" : ""}>${c.emoji ? c.emoji + " " : ""}${esc(c.label)}</option>`).join("")}</select></label>`,
+      d => { setCat(id, d.querySelector('[name="cat"]').value); });
+  }
+  else if (act === "up" || act === "down") {
+    const ids = LIST.entries.filter(i => !i.bought && i.cat === en.cat).sort(byOrder).map(i => i.id);
+    const k = ids.indexOf(id), j = act === "up" ? k - 1 : k + 1;
+    if (j < 0 || j >= ids.length) return;
+    [ids[k], ids[j]] = [ids[j], ids[k]];
+    reorder(en.cat, ids); persist(); render();
+  }
+  else if (act === "planall") { planShowAll = !planShowAll; render(); }
+  else if (act === "fill") { fillFromPlan(); Mock.toast("Cart filled from the plan"); }
+  else if (act === "emptycart") {
+    LIST.entries.forEach(i => { if (!i.bought) i.in_cart = false; });
+    persist(); render();
+  }
+  else if (act === "buycart") {
+    if (btn.dataset.sure !== "1") {
+      btn.dataset.sure = "1"; btn.textContent = "Sure?";
+      setTimeout(() => { btn.dataset.sure = ""; btn.textContent = "Mark cart as bought"; }, 2500);
+      return;
+    }
+    const n = LIST.entries.filter(i => i.in_cart && !i.bought).length;
+    LIST.entries.forEach(i => { if (i.in_cart && !i.bought) { i.bought = true; i.in_cart = false; } });
+    persist(); render();
+    Mock.toast(`${n} item${n === 1 ? "" : "s"} marked as bought`);
+  }
+  else if (act === "openall") {
+    btn.closest(".storegroup").querySelectorAll("a.title").forEach(a => window.open(a.href, "_blank", "noopener,noreferrer"));
+  }
+  else if (act === "delete") {
+    if (btn.dataset.sure !== "1") {
+      btn.dataset.sure = "1"; btn.textContent = "Sure?";
+      setTimeout(() => { btn.dataset.sure = ""; btn.textContent = "✕"; }, 2500);
+      return;
+    }
+    LIST.entries = LIST.entries.filter(i => i.id !== id);
+    persist(); render();
+  }
+  else if (act === "edit") {
+    const f = (name, label, val, type = "text") => `<label>${label}<input name="${name}" type="${type}" value="${esc(val ?? "")}"></label>`;
+    Mock.dialog("Edit item", `
+      ${f("title", "Title", en.title)}
+      <div class="row">${f("price", "Price", en.price > 0 ? String(en.price) : "", "text").replace("<input", '<input placeholder="e.g. 49,90"')}
+      ${f("currency", "Currency", en.currency || "EUR")}</div>
+      ${f("store", "Store", en.store)}
+      ${f("group", "Group (only one per group is planned)", en.group)}
+      ${f("image", "Image link", en.image)}
+      <label>Notes<textarea name="notes" rows="2">${esc(en.notes)}</textarea></label>`,
+      d => {
+        const v = name => d.querySelector(`[name="${name}"]`).value.trim();
+        en.title = v("title") || en.title;
+        const p = parseFloat(v("price").replace(",", "."));
+        en.price = isNaN(p) || p <= 0 ? null : p;
+        en.currency = (v("currency") || "EUR").toUpperCase();
+        en.store = v("store"); en.group = v("group"); en.image = v("image"); en.notes = v("notes");
+        persist(); render();
+      });
+  }
+});
+
+/* ---------------------------------------------------------------- drag and drop (cards and categories) */
+const main = $("#main");
+main.addEventListener("dragstart", e => {
+  const c = e.target.closest(".card[draggable='true']"); if (!c) return;
+  dragId = c.dataset.id;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", dragId);
+  c.classList.add("dragging");
+});
+main.addEventListener("dragend", () => {
+  dragId = null;
+  document.querySelectorAll(".dragging").forEach(el => el.classList.remove("dragging"));
+  document.querySelectorAll(".psgrid.over").forEach(el => el.classList.remove("over"));
+});
+function dropSpot(e) {
+  if (!dragId) return null;
+  const sec = e.target.closest(".psgrid");
+  if (sec) {
+    const cards = [...sec.querySelectorAll(".card:not(.dragging)")];
+    let idx = cards.length;
+    for (let k = 0; k < cards.length; k++) {
+      const r = cards[k].getBoundingClientRect();
+      if (e.clientY < r.bottom && (e.clientY < r.top + r.height / 2 || e.clientX < r.left + r.width / 2)) { idx = k; break; }
+    }
+    return { cat: sec.dataset.tier, idx };
+  }
+  const cardEl = e.target.closest(".card[data-id]");
+  if (!cardEl || cardEl.dataset.id === dragId || view === "cart" || !isManual()) return null;
+  const target = entry(cardEl.dataset.id);
+  if (!target || target.bought) return null;
+  const ids = LIST.entries.filter(i => !i.bought && i.cat === target.cat && i.id !== dragId).sort(byOrder).map(i => i.id);
+  let idx = ids.indexOf(target.id);
+  const r = cardEl.getBoundingClientRect();
+  if (e.clientX > r.left + r.width / 2) idx += 1;
+  return { cat: target.cat, idx };
+}
+main.addEventListener("dragover", e => {
+  const spot = dropSpot(e); if (!spot) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  const sec = e.target.closest(".psgrid");
+  document.querySelectorAll(".psgrid.over").forEach(el => el !== sec && el.classList.remove("over"));
+  if (sec) sec.classList.add("over");
+});
+main.addEventListener("drop", e => {
+  const spot = dropSpot(e); if (!spot) return;
+  e.preventDefault();
+  const id = dragId; dragId = null;
+  moveItem(id, spot.cat, spot.idx);
+});
+const nav = $("#catNav");
+nav.addEventListener("dragover", e => {
+  const row = e.target.closest(".navrow");
+  if (!row || !dragId || row.dataset.cat === "*") return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  nav.querySelectorAll(".navrow").forEach(r => r.classList.toggle("drop", r === row));
+});
+nav.addEventListener("dragleave", e => {
+  if (!nav.contains(e.relatedTarget)) nav.querySelectorAll(".drop").forEach(r => r.classList.remove("drop"));
+});
+nav.addEventListener("drop", e => {
+  const row = e.target.closest(".navrow");
+  if (!row || !dragId || row.dataset.cat === "*") return;
+  e.preventDefault();
+  const id = dragId; dragId = null;
+  nav.querySelectorAll(".drop").forEach(r => r.classList.remove("drop"));
+  moveItem(id, row.dataset.cat, null);
+});
+
+render();
+</script>
+</body>
+</html>

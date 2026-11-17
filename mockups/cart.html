@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cart · Wishlist mock-up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="top" style="max-width:1400px;margin:0 auto;padding-bottom:0">
+  <div>
+    <h1>Cart</h1>
+    <div class="summary">Items you've picked from your lists, grouped by store</div>
+  </div>
+  <button id="emptyBtn">Empty cart</button>
+</div>
+
+<div class="app" style="grid-template-columns:minmax(0,1fr) 300px">
+  <main class="center" id="groups"></main>
+  <aside class="side side-right" id="side"></aside>
+</div>
+
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+<script>
+Mock.rail("cart");
+Mock.onChange = () => render();
+
+// Items in the cart from every list I can edit (one entry per list)
+function cartEntries() {
+  const out = [];
+  MOCK_LISTS.filter(l => Mock.canEdit(l)).forEach(l => {
+    l.entries.filter(e => e.in_cart && !e.bought).forEach(e => out.push({ e, l }));
+  });
+  return out;
+}
+
+function cartCard({ e, l }) {
+  const cat = Mock.catOf(l, e.cat);
+  return `
+  <article class="card" data-id="${e.id}" data-list="${l.id}">
+    <div class="thumb">${Mock.thumbImg(e)}</div>
+    <div class="body">
+      <div class="store">${Mock.esc(Mock.storeOf(e))}</div>
+      <a class="title" href="${Mock.esc(e.url)}" target="_blank" rel="noopener noreferrer">${Mock.esc(e.title)}</a>
+      <div class="price">${e.price > 0 ? Mock.money(e.price) : '<span class="price none">No price found</span>'}</div>
+      <div class="notes" style="font-style:normal">${cat.emoji ? cat.emoji + " " : ""}${Mock.esc(cat.label)}</div>
+      <div class="notes" style="font-style:normal">In <a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a></div>
+      <div class="actions"><button data-remove="${e.id}" data-list-id="${l.id}">🛒 Remove</button></div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  const items = cartEntries();
+  const groups = {};
+  items.forEach(it => (groups[it.e.store || "Unknown store"] ||= []).push(it));
+  document.getElementById("groups").innerHTML = items.length
+    ? Object.keys(groups).sort((a, b) => a.localeCompare(b)).map(store => {
+        const g = groups[store];
+        return `<section class="storegroup">
+          <div class="shead"><h3>${Mock.esc(store)}</h3>
+            <span class="sub">${Mock.plural(g.length, "item")} · <b>${Mock.money(g.reduce((s, x) => s + (x.e.price > 0 ? x.e.price : 0), 0))}</b></span></div>
+          <div class="grid">${g.map(cartCard).join("")}</div>
+        </section>`;
+      }).join("")
+    : `<div class="empty"><b>Your cart is empty</b>Press 🛒 Add on an item in one of your lists.</div>`;
+
+  const total = items.reduce((s, x) => s + (x.e.price > 0 ? x.e.price : 0), 0);
+  const b = MOCK_ME_STATE.budget;
+  // spend per list, since each list has its own categories
+  const perList = MOCK_LISTS.filter(l => Mock.canEdit(l)).map(l => ({
+    label: l.title, color: "var(--accent)",
+    amount: items.filter(x => x.l.id === l.id).reduce((s, x) => s + (x.e.price > 0 ? x.e.price : 0), 0),
+  }));
+  const palette = ["var(--c-die)", "var(--c-need)", "var(--c-noturg)", "var(--ok)", "var(--c-left)", "var(--accent)", "var(--c-other)"];
+  perList.forEach((p, i) => p.color = palette[i % palette.length]);
+  const status = b == null
+    ? `<div class="status muted">No budget set in Wallet</div>`
+    : (b - total >= -0.005
+        ? `<div class="status ok">${Mock.money(b - total)} left</div>`
+        : `<div class="status bad">${Mock.money(total - b)} over budget</div>`);
+  const bar = b ? `<div class="bbar ${total > b ? "over" : ""}"><i style="width:${Math.min(100, (total / b) * 100)}%"></i></div>` : "";
+  document.getElementById("side").innerHTML = `<div class="panel">
+    <h3>Cart budget</h3>
+    <div class="donut">${Mock.donut(perList, total, "in cart")}</div>
+    ${status}
+    <div class="cartline">🛒 <b>${items.length}</b> item${items.length === 1 ? "" : "s"} · <b>${Mock.money(total)}</b>${b != null ? ` of ${Mock.money(b)}` : ""}</div>
+    ${bar}
+    <ul class="legend">${Mock.legend(perList)}</ul>
+    <p style="margin:12px 0 0;font-size:13px"><a href="wallet.html">Change the budget in Wallet →</a></p>
+  </div>`;
+}
+
+document.addEventListener("click", e => {
+  const r = e.target.closest("[data-remove]");
+  if (r) {
+    const l = Mock.list(r.dataset.listId);
+    const en = l.entries.find(x => x.id === r.dataset.remove);
+    if (en) en.in_cart = false;
+    Mock.save(); render(); Mock.toast("Removed from cart");
+    return;
+  }
+  if (e.target.closest("#emptyBtn")) {
+    const items = cartEntries();
+    if (!items.length) { Mock.toast("The cart is already empty"); return; }
+    items.forEach(x => x.e.in_cart = false);
+    Mock.save(); render(); Mock.toast("Cart emptied");
+  }
+});
+
+render();
+</script>
+</body>
+</html>

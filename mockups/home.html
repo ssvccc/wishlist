@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home · Wishlist mock-up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="top" style="max-width:920px;margin:0 auto;padding-bottom:0">
+  <div>
+    <h1>Home</h1>
+    <div class="summary">Wishlists and price drops from people you follow</div>
+  </div>
+</div>
+
+<div class="home-wrap">
+  <main class="feed" id="feed" aria-label="Feed"></main>
+
+  <aside class="home-side" aria-label="Suggestions">
+    <section class="panel">
+      <h3>Popular for Black Friday</h3>
+      <div id="popular"></div>
+    </section>
+    <section class="panel" style="margin-top:16px">
+      <h3>People to follow</h3>
+      <div id="suggest"></div>
+    </section>
+  </aside>
+</div>
+
+<style>
+  .home-wrap { max-width: 1180px; margin: 0 auto; padding: 18px 20px 64px; display: grid;
+               grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+  .home-wrap .feed { max-width: none; margin: 0; padding: 0; }
+  .home-side { position: sticky; top: 16px; }
+  .pop-row { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .pop-row:first-of-type { border-top: 0; padding-top: 4px; }
+  .pop-row .mini { display: block; width: 46px; height: 46px; border-radius: 10px; overflow: hidden; flex: 0 0 auto; }
+  .pop-row .mini .collage { width: 100%; height: 100%; }
+  .pop-row .pr-text { flex: 1; min-width: 0; }
+  .pop-row .pr-text a { font-weight: 600; text-decoration: none; font-size: 14px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pop-row .pr-text a:hover { text-decoration: underline; }
+  .pop-row .pr-text small { color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 1000px) { .home-wrap { grid-template-columns: minmax(0, 1fr); } .home-side { position: static; } }
+</style>
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+<script>
+Mock.rail("home");
+
+function renderSide() {
+  document.getElementById("popular").innerHTML = MOCK_POPULAR.map(id => {
+    const l = Mock.list(id);
+    return `<div class="pop-row">
+      <a class="mini" href="list.html?id=${l.id}">${Mock.collage(l)}</a>
+      <div class="pr-text">
+        <a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a>
+        <small>${Mock.esc(Mock.user(l.owner).name)} · ${Mock.plural(l.entries.length, "item")}</small>
+      </div>
+    </div>`;
+  }).join("");
+  document.getElementById("suggest").innerHTML = MOCK_SUGGEST.map(id => {
+    const u = Mock.user(id), f = Mock.follows(id);
+    return `<div class="person">
+      ${Mock.avatar(u, "md")}
+      <div class="pe-text"><b>${Mock.esc(u.name)}</b><small>${Mock.plural(u.followers, "follower")}</small></div>
+      <button class="${f ? "btn-on" : ""}" data-follow="${id}" aria-pressed="${f}">${f ? "Following" : "Follow"}</button>
+    </div>`;
+  }).join("");
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-follow]");
+  if (!b) return;
+  const id = b.dataset.follow, on = Mock.toggleFollow(id);
+  renderSide();
+  Mock.toast(on ? `Following ${Mock.user(id).name}` : `Unfollowed ${Mock.user(id).name}`);
+});
+
+const feed = document.getElementById("feed");
+
+function listCard(l) {
+  const owner = Mock.user(l.owner);
+  const wanted = l.entries.filter(e => !e.bought);
+  const readonly = !Mock.canEdit(l);
+  const row = wanted.slice(0, 5);
+  return `
+  <article class="card fl">
+    <div class="fl-head">
+      ${Mock.avatar(owner, "md")}
+      <div class="who"><b>${Mock.esc(owner.name)}</b><small>@${Mock.esc(owner.handle)} · ${l.updated}</small></div>
+      <button class="kebab" data-kebab="${l.id}" aria-label="More options for ${Mock.esc(l.title)}" title="More options">⋯</button>
+    </div>
+    <h2 class="fl-title"><a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a>
+      <span class="vis ${l.visibility}">${l.visibility === "private" ? Mock.icon("lock", 12) : ""}${Mock.visLabel(l.visibility)}</span></h2>
+    <div class="fl-sum"><b>${wanted.length}</b> wanted · total <b>${Mock.money(Mock.total(wanted))}</b></div>
+    <div class="fl-row">
+      ${row.map(e => Mock.card(e, l, { readonly, noActions: true })).join("") || `<div class="muted" style="grid-column:1/-1">Nothing wanted yet.</div>`}
+    </div>
+    <a class="fl-see" href="list.html?id=${l.id}">See all →</a>
+  </article>`;
+}
+
+function activityCard(f) {
+  const u = Mock.user(f.user), l = Mock.list(f.listId);
+  const e = l.entries.find(x => x.item === f.itemId);
+  const cat = Mock.catOf(l, e.cat);
+  return `
+  <article class="card act">
+    ${Mock.avatar(u, "md")}
+    <div class="thumb-sm">${Mock.thumbImg(e)}</div>
+    <div class="txt">
+      <b>${Mock.esc(u.name)}</b> added <a href="${Mock.esc(e.url)}" target="_blank" rel="noopener noreferrer">${Mock.esc(e.title)}</a>
+      to <a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a>
+      <span class="when">${f.ago} ago · ${Mock.money(e.price)} · ${cat.emoji ? cat.emoji + " " : ""}${Mock.esc(cat.label)}</span>
+    </div>
+  </article>`;
+}
+
+function priceCard(f) {
+  const l = Mock.list(f.listId), e = l.entries.find(x => x.item === f.itemId);
+  const pct = Math.round((1 - e.price / f.was) * 100);
+  return `
+  <article class="card act pcard">
+    <div class="thumb-sm">${Mock.thumbImg(e)}</div>
+    <div class="txt">
+      <span class="pc-kicker">Price dropped</span>
+      <div><a href="${Mock.esc(e.url)}" target="_blank" rel="noopener noreferrer">${Mock.esc(e.title)}</a></div>
+      <div class="pc-price">
+        <span class="price">${Mock.money(e.price)}</span>
+        <span class="price-old">${Mock.money(f.was)}</span>
+        <span class="tag-ok">−${pct}%</span>
+      </div>
+      <span class="when">In <a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a> · ${f.ago} ago</span>
+    </div>
+    <a class="btn sm" style="border:1px solid var(--line);border-radius:10px;padding:6px 10px;text-decoration:none;color:inherit" href="${Mock.esc(e.url)}" target="_blank" rel="noopener noreferrer">View item</a>
+  </article>`;
+}
+
+function render() {
+  feed.innerHTML = MOCK_FEED.map(f => {
+    if (f.type === "list") return listCard(Mock.list(f.listId));
+    if (f.type === "activity") return activityCard(f);
+    return priceCard(f);
+  }).join("");
+}
+
+Mock.onChange = () => { render(); renderSide(); };
+render();
+renderSide();
+</script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wallet · Wishlist mock-up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="top" style="max-width:1400px;margin:0 auto;padding-bottom:0">
+  <div>
+    <h1>Wallet</h1>
+    <div class="summary">Your overall budget, what's in the cart, and a budget for each of your lists</div>
+  </div>
+</div>
+
+<div class="wrap" style="padding-top:18px">
+  <section class="panel" style="display:grid;grid-template-columns:190px minmax(0,1fr);gap:24px;align-items:center;margin-bottom:18px">
+    <div id="wdonut"></div>
+    <div>
+      <h3 style="margin:0 0 8px;font:600 15px ui-sans-serif,sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Overall budget</h3>
+      <label class="blabel">Budget €<input id="globalBudget" inputmode="decimal" placeholder="e.g. 1000"></label>
+      <div id="wstatus"></div>
+      <ul class="legend" id="wlegend" style="margin-top:10px"></ul>
+    </div>
+  </section>
+
+  <div class="sectitle">Budgets by list <small>Only what's in the cart counts toward a list</small></div>
+  <section class="card">
+    <table class="wtable">
+      <thead><tr><th>List</th><th class="num">In cart</th><th class="num">Budget €</th><th class="num">Left</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</div>
+
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+<script>
+Mock.rail("wallet");
+Mock.onChange = () => { renderTop(); renderRows(); };
+
+const myLists = () => MOCK_LISTS.filter(l => Mock.canEdit(l));
+const cartTotal = () => myLists().reduce((s, l) => s + spendOf(l), 0);
+const spendOf = l => l.entries.filter(e => e.in_cart && !e.bought).reduce((s, e) => s + (e.price > 0 ? e.price : 0), 0);
+const leftText = (budget, spent) => budget == null ? "—"
+  : (budget - spent >= -0.005 ? Mock.money(budget - spent) : `<span style="color:var(--bad)">${Mock.money(spent - budget)} over</span>`);
+
+function renderTop() {
+  const total = cartTotal();
+  const b = MOCK_ME_STATE.budget;
+  const input = document.getElementById("globalBudget");
+  if (document.activeElement !== input) input.value = b == null ? "" : String(b);
+  const palette = ["var(--c-die)", "var(--c-need)", "var(--c-noturg)", "var(--ok)", "var(--c-left)", "var(--accent)", "var(--c-other)"];
+  const parts = myLists().map((l, i) => ({ label: l.title, color: palette[i % palette.length], amount: spendOf(l) }));
+  document.getElementById("wdonut").innerHTML = Mock.donut(parts, total, "in cart");
+  document.getElementById("wstatus").innerHTML = b == null
+    ? `<div class="status muted" style="font:500 15px ui-sans-serif,sans-serif;color:var(--muted)">Set a budget to see what's left</div>`
+    : (b - total >= -0.005
+        ? `<div class="status ok">${Mock.money(b - total)} left</div>`
+        : `<div class="status bad">${Mock.money(total - b)} over budget</div>`)
+      + `<div class="bbar ${total > b ? "over" : ""}"><i style="width:${Math.min(100, (total / b) * 100)}%"></i></div>`;
+  document.getElementById("wlegend").innerHTML = Mock.legend(parts);
+}
+
+function renderRows() {
+  document.getElementById("rows").innerHTML = myLists().map(l => {
+    const spent = spendOf(l);
+    const pct = l.budget ? Math.min(100, (spent / l.budget) * 100) : 0;
+    return `<tr data-row="${l.id}">
+      <td><a href="list.html?id=${l.id}">${Mock.esc(l.title)}</a>
+        <div class="muted" style="font-size:12.5px">${Mock.plural(l.entries.length, "item")} · ${Mock.visLabel(l.visibility)}</div>
+        ${l.budget ? `<div class="bbar ${spent > l.budget ? "over" : ""}"><i style="width:${pct}%"></i></div>` : ""}
+      </td>
+      <td class="num" data-spent>${Mock.money(spent)}</td>
+      <td class="num"><input inputmode="decimal" placeholder="Not set" value="${l.budget == null ? "" : l.budget}" data-budget="${l.id}" aria-label="Budget for ${Mock.esc(l.title)}"></td>
+      <td class="num" data-left>${leftText(l.budget, spent)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">You don't have any lists yet.</td></tr>`;
+}
+
+function updateRow(l) {
+  const row = document.querySelector(`[data-row="${l.id}"]`);
+  if (!row) return;
+  const spent = spendOf(l);
+  row.querySelector("[data-spent]").textContent = Mock.money(spent);
+  row.querySelector("[data-left]").innerHTML = leftText(l.budget, spent);
+}
+
+document.getElementById("globalBudget").addEventListener("input", e => {
+  const n = parseFloat(String(e.target.value).replace(",", "."));
+  MOCK_ME_STATE.budget = isNaN(n) || n < 0 ? null : n;
+  Mock.save();
+  renderTop();
+});
+
+document.getElementById("rows").addEventListener("input", e => {
+  const id = e.target.dataset.budget;
+  if (!id) return;
+  const l = Mock.list(id);
+  const n = parseFloat(String(e.target.value).replace(",", "."));
+  l.budget = isNaN(n) || n < 0 ? null : n;
+  Mock.save();
+  updateRow(l);
+  renderTop();
+});
+
+renderTop();
+renderRows();
+</script>
+</body>
+</html>

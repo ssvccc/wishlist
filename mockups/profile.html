@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profile · Wishlist mock-up</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<section class="card band" id="band"></section>
+<div class="wrap">
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div id="tabbody"></div>
+</div>
+
+<script src="mock-data.js"></script>
+<script src="app.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const uid = MOCK_USERS[params.get("user")] ? params.get("user") : MOCK_ME;   // ?user=elif shows Elif; default is you
+const own = uid === MOCK_ME;
+const u = Mock.user(uid);
+let tab = ["lists", "liked", "shared"].includes(params.get("tab")) ? params.get("tab") : "lists";
+const firstName = u.name.split(" ")[0];
+let creating = false;
+
+Mock.rail(own ? { lists: "lists", liked: "liked", shared: "shared" }[tab] || "lists" : null);
+Mock.onChange = () => renderAll();
+
+/* ---- data for this profile */
+const ownLists = () => MOCK_LISTS.filter(l => l.owner === uid);
+const visibleLists = () => own ? ownLists() : ownLists().filter(l => l.visibility !== "private");
+const likedLists = () => {
+  const ids = own ? MOCK_ME_STATE.liked : (u.liked || []);
+  return MOCK_LISTS.filter(l => ids.includes(l.id) && (own || l.visibility !== "private"));
+};
+const sharedLists = () => MOCK_LISTS.filter(l => l.collab.some(c => c.user === uid) && l.owner !== uid && (own || l.visibility !== "private"));
+const followers = () => u.followers + (!own && Mock.follows(uid) ? 1 : 0);
+const following = () => own ? MOCK_ME_STATE.follows.length : u.following;
+
+/* ---- header band */
+function renderBand() {
+  const f = Mock.follows(uid);
+  document.getElementById("band").innerHTML = `
+    ${Mock.avatar(u, "lg")}
+    <div class="band-info">
+      <h1>${Mock.esc(u.name)}</h1>
+      <div class="handle">@${Mock.esc(u.handle)}</div>
+      <p class="bio">${Mock.esc(u.bio)}</p>
+      <div class="counts">
+        <div><b>${visibleLists().length}</b>lists</div>
+        <div><b>${followers()}</b>followers</div>
+        <div><b>${following()}</b>following</div>
+      </div>
+    </div>
+    <div class="band-actions">
+      ${own
+        ? `<button class="btn-on" type="button" data-nobuild="Edit profile" onclick="Mock.toast('Edit profile isn’t part of this mock-up')">Edit profile</button>`
+        : `<button class="${f ? "btn-on" : ""}" type="button" data-follow aria-pressed="${f}">${f ? "Following" : "Follow"}</button>
+           <button type="button" onclick="Mock.toast('Messages aren’t part of this mock-up')">Message</button>`}
+    </div>`;
+}
+
+/* ---- tabs */
+const TABS = [
+  ["lists", "Lists", () => visibleLists().length],
+  ["liked", "Favs", () => likedLists().length],
+  ["shared", own ? "Shared with me" : `Shared with ${firstName}`, () => sharedLists().length],
+];
+function renderTabs() {
+  document.getElementById("tabs").innerHTML = TABS.map(([key, label, count]) =>
+    `<button class="tab ${tab === key ? "on" : ""}" role="tab" aria-selected="${tab === key}" data-tab="${key}">${label}<span class="n">${count()}</span></button>`
+  ).join("");
+}
+
+/* ---- list covers */
+function coverCard(l, showOwner) {
+  const n = l.entries.length, total = Mock.total(l.entries);
+  let foot;
+  if (l.visibility === "private") foot = `<span class="vis private">${Mock.icon("lock", 12)}Private</span>`;
+  else if (l.collab.length) foot = `${Mock.stack(Mock.owners(l))}<span class="muted" style="font-size:12px">Shared</span>`;
+  else foot = `<span class="vis ${l.visibility}">${Mock.visLabel(l.visibility)}</span>`;
+  const by = showOwner ? `<div class="by">${Mock.avatar(Mock.user(l.owner), "sm")}<span>by <b>${Mock.esc(Mock.user(l.owner).name)}</b></span></div>` : "";
+  return `
+  <a class="card lcard" href="list.html?id=${l.id}">
+    ${Mock.collage(l)}
+    <div class="lb">
+      <div class="lt">${Mock.esc(l.title)}</div>
+      <div class="lmeta">${Mock.plural(n, "item")} · ${Mock.money(total)} total</div>
+      ${by}
+      <div class="lfoot">${foot}</div>
+    </div>
+  </a>`;
+}
+
+function renderBody() {
+  const body = document.getElementById("tabbody");
+  const hiddenPrivate = !own && ownLists().some(l => l.visibility === "private");
+  const notice = hiddenPrivate ? `<p class="notice">${Mock.icon("lock", 14)} Private lists are only visible to ${firstName}.</p>` : "";
+  let list, empty, showOwner = false;
+  if (tab === "lists") {
+    list = visibleLists(); empty = own ? "You haven't made a list yet." : `${firstName} has no public lists yet.`;
+  } else if (tab === "liked") {
+    list = likedLists(); empty = own ? "Nothing favourited yet. Tap ⋯ on a list and choose Like." : `${firstName} hasn't liked any lists yet.`;
+    showOwner = true;
+  } else {
+    list = sharedLists(); empty = own ? "Nothing has been shared with you yet." : `Nothing shared with ${firstName} yet.`;
+    showOwner = true;
+  }
+  const toolbar = own && tab === "lists"
+    ? `<div style="display:flex;gap:8px;margin-bottom:16px"><button class="primary" type="button" data-newlist-open>+ New list</button></div>
+       ${creating ? `<form class="card panel newform" id="newForm" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px;margin-bottom:18px">
+         <input id="newTitle" maxlength="40" placeholder="List name" aria-label="List name" required style="flex:1;min-width:200px;font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
+         <select id="newVis" aria-label="Visibility" style="font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
+           <option value="public">Public</option><option value="friends">Friends</option><option value="private" selected>Private</option>
+         </select>
+         <button class="primary" type="submit">Create list</button>
+         <button type="button" data-newlist-cancel>Cancel</button>
+       </form>` : ""}` : "";
+  body.innerHTML = notice + toolbar + (list.length
+    ? `<div class="grid4">${list.map(l => coverCard(l, showOwner)).join("")}</div>`
+    : `<div class="empty"><b>Nothing here</b>${empty}</div>`);
+}
+
+function renderAll() {
+  renderBand();
+  renderTabs();
+  renderBody();
+}
+
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-newlist-open]")) { creating = true; renderBody(); document.getElementById("newTitle").focus(); return; }
+  if (e.target.closest("[data-newlist-cancel]")) { creating = false; renderBody(); return; }
+  const t = e.target.closest("[data-tab]");
+  if (t) {
+    tab = t.dataset.tab;
+    try { history.replaceState(null, "", `profile.html?${own ? "" : `user=${uid}&`}tab=${tab}`); } catch (_) {}
+    renderAll();
+    return;
+  }
+  const f = e.target.closest("[data-follow]");
+  if (f) {
+    Mock.toggleFollow(uid);
+    renderAll();
+    Mock.toast(Mock.follows(uid) ? `Following ${u.name}` : `Unfollowed ${u.name}`);
+  }
+});
+
+document.addEventListener("submit", e => {
+  if (e.target.id !== "newForm") return;
+  e.preventDefault();
+  const title = document.getElementById("newTitle").value.trim();
+  if (!title) return;
+  const l = Mock.createList(title, document.getElementById("newVis").value);
+  creating = false;
+  renderAll();
+  Mock.toast(`Created ${l.title}`);
+});
+
+renderAll();
+</script>
+</body>
+</html>
